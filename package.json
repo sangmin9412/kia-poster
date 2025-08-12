@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "node -e \"if (process.env.VERCEL) console.log('Skipping chromium download on Vercel')\""
   },
   "dependencies": {
     "@sparticuz/chromium": "^131.0.0",

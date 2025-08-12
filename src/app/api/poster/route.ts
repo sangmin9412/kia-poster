@@ -1,10 +1,16 @@
 export const runtime = 'nodejs';
 export const maxDuration = 30; // Vercel 함수 타임아웃 설정 (초)
 
-import puppeteer from 'puppeteer-core';
+import puppeteer, { LaunchOptions } from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
+// Chromium 설정 최적화
+chromium.setHeadlessMode = true;
+chromium.setGraphicsMode = false;
+
 export async function POST(request: Request) {
+  let browser = null;
+  
   try {
     const payload = await request.json().catch(() => ({}));
     const text = typeof payload?.text === 'string' ? payload.text : undefined;
@@ -12,23 +18,71 @@ export async function POST(request: Request) {
     searchParams.set('text', text ?? '');
     // 2) Log the received text value
     console.log('[POST /api/poster] text:', text);
+    console.log('[POST /api/poster] Environment:', process.env.NODE_ENV);
+    console.log('[POST /api/poster] Vercel:', process.env.VERCEL);
 
     // 3) Launch browser, navigate to /poster, screenshot, close, return base64
     const origin = new URL(request.url).origin;
 
     // Vercel 환경과 로컬 환경 구분
-    const isLocal = process.env.NODE_ENV === 'development';
+    const isVercel = process.env.VERCEL === '1';
+    const isLocal = !isVercel && process.env.NODE_ENV === 'development';
     
-    const browser = await puppeteer.launch({
-      args: isLocal 
-        ? ['--no-sandbox', '--disable-setuid-sandbox']
-        : [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+    console.log('[POST /api/poster] isVercel:', isVercel, 'isLocal:', isLocal);
+    
+    // Vercel 환경에서 추가 args 설정
+    const chromiumArgs = [
+      '--autoplay-policy=user-gesture-required',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-breakpad',
+      '--disable-client-side-phishing-detection',
+      '--disable-component-extensions-with-background-pages',
+      '--disable-default-apps',
+      '--disable-dev-shm-usage',
+      '--disable-extensions',
+      '--disable-features=TranslateUI',
+      '--disable-hang-monitor',
+      '--disable-ipc-flooding-protection',
+      '--disable-notifications',
+      '--disable-offer-store-unmasked-wallet-cards',
+      '--disable-popup-blocking',
+      '--disable-print-preview',
+      '--disable-prompt-on-repost',
+      '--disable-renderer-backgrounding',
+      '--disable-setuid-sandbox',
+      '--disable-speech-api',
+      '--disable-sync',
+      '--hide-scrollbars',
+      '--ignore-gpu-blacklist',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--no-default-browser-check',
+      '--no-first-run',
+      '--no-pings',
+      '--no-sandbox',
+      '--no-zygote',
+      '--password-store=basic',
+      '--use-gl=swiftshader',
+      '--use-mock-keychain',
+      '--disable-web-security',
+      '--single-process'
+    ];
+    
+    const browserOptions: LaunchOptions = {
+      headless: true,
+      args: isVercel ? chromiumArgs : ['--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: chromium.defaultViewport,
-      executablePath: isLocal 
-        ? undefined  // 로컬에서는 puppeteer가 자동으로 Chrome을 찾음
-        : await chromium.executablePath(),  // Vercel에서는 chromium 바이너리 사용
-      headless: chromium.headless,
-    });
+    };
+    
+    // Vercel 환경에서만 executablePath 설정
+    if (isVercel) {
+      browserOptions.executablePath = await chromium.executablePath();
+      console.log('[POST /api/poster] Chromium path:', browserOptions.executablePath);
+    }
+    
+    browser = await puppeteer.launch(browserOptions);
 
     try {
       const page = await browser.newPage();
