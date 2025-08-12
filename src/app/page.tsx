@@ -1,41 +1,66 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useState } from "react";
 
-export default function Home() {
-  const [isLoading, setIsLoading] = useState(false);
+export default function HomePage() {
+  const [url, setUrl] = useState("");
+  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleScreenshot = async () => {
+    if (!url) {
+      setError("Please enter a valid URL.");
+      return;
+    }
+    // Client-side URL validation: must start with http:// or https:// and be a valid URL
+    if (!/^https?:\/\//i.test(url.trim())) {
+      setError("URL must start with http:// or https://");
+      return;
+    }
+    try {
+      new URL(url.trim());
+    } catch {
+      setError("Invalid URL format. Please enter a valid URL.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setScreenshot(null);
+
+    try {
+      const response = await fetch(
+        `/api/poster?url=${encodeURIComponent(url)}`
+      );
+      if (!response.ok) {
+        throw new Error("Failed to capture screenshot.");
+      }
+      const blob = await response.blob();
+      setScreenshot(URL.createObjectURL(blob));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDownload = async () => {
     try {
-      setIsLoading(true);
-      
-      // Send POST request to /api/poster
-      const response = await fetch('/api/poster', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: 'Poster Generated' }),
-      });
+      setIsDownloading(true);
 
+      const response = await fetch(
+        `/api/poster?url=${encodeURIComponent(url)}`
+      );
       if (!response.ok) {
-        throw new Error('Failed to generate poster');
+        throw new Error("Failed to capture screenshot.");
       }
-
-      const data = await response.json();
-      const { imageBase64 } = data;
-
-      // Convert base64 to blob
-      const byteCharacters = atob(imageBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/png' });
+      const blob = await response.blob();
       
       // Create download URL
-      const url = URL.createObjectURL(blob);
+      const downloadUrl = URL.createObjectURL(blob);
       const fileName = `poster-${Date.now()}.png`;
 
       // Check if mobile Safari (iOS)
@@ -241,76 +266,105 @@ export default function Home() {
       } else {
         // Desktop and Android - use standard download
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         
         // Clean up
-        setTimeout(() => URL.revokeObjectURL(url), 100);
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
       }
     } catch (error) {
       console.error('Download failed:', error);
       alert('포스터 다운로드에 실패했습니다. 다시 시도해주세요.');
     } finally {
-      setIsLoading(false);
+      setIsDownloading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <main className="flex flex-col gap-8 items-center">
-        <h1 className="text-4xl font-bold text-gray-800 dark:text-gray-100 text-center">
-          Poster Generator
+    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-50">
+      <div className="w-full max-w-2xl text-center">
+        <h1 className="text-4xl font-bold mb-4 text-gray-800">
+          Puppeteer on Vercel
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 text-center max-w-md">
-          클릭하여 포스터를 생성하고 다운로드하세요
+        <p className="text-lg text-gray-600 mb-8">
+          Enter a URL below to generate a screenshot using Puppeteer running in
+          a Vercel Function.
         </p>
-        <button
-          onClick={handleDownload}
-          disabled={isLoading}
-          className={`
-            relative px-8 py-4 rounded-lg font-semibold text-white
-            transition-all duration-200 transform
-            ${isLoading 
-              ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 active:scale-95'
-            }
-            shadow-lg hover:shadow-xl
-            disabled:hover:scale-100
-          `}
-        >
-          {isLoading ? (
-            <span className="flex items-center gap-2">
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                <circle 
-                  className="opacity-25" 
-                  cx="12" 
-                  cy="12" 
-                  r="10" 
-                  stroke="currentColor" 
-                  strokeWidth="4"
-                  fill="none"
-                />
-                <path 
-                  className="opacity-75" 
-                  fill="currentColor" 
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              생성 중...
-            </span>
-          ) : (
-            '포스터 다운로드'
-          )}
-        </button>
-        <div className="mt-8 text-sm text-gray-500 dark:text-gray-400 text-center">
-          <p>💡 모바일 팁</p>
-          <p className="mt-2">iOS: 이미지를 길게 눌러 저장</p>
-          <p>Android: 자동으로 다운로드됩니다</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://vercel.com"
+            className="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-black focus:outline-none"
+          />
+          <button
+            onClick={handleScreenshot}
+            disabled={loading}
+            className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+          >
+            {loading ? "Capturing..." : "Capture"}
+          </button>
         </div>
-      </main>
-    </div>
+        {error && <p className="text-red-500 mt-4">{error}</p>}
+        {screenshot && (
+          <>
+            <div className="mt-8 border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+              <h2 className="text-2xl font-semibold p-4 bg-gray-100 border-b text-black">
+                Screenshot Preview
+              </h2>
+              <img
+                src={screenshot || "/placeholder.svg"}
+                alt="Website screenshot"
+                className="w-full"
+              />
+            </div>
+            <div className="mt-8">
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className={`
+                relative px-8 py-4 rounded-lg font-semibold text-white
+                transition-all duration-200 transform
+                ${isDownloading 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 active:scale-95'
+                }
+                shadow-lg hover:shadow-xl
+                disabled:hover:scale-100
+              `}
+            >
+              {isDownloading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle 
+                      className="opacity-25" 
+                      cx="12" 
+                      cy="12" 
+                      r="10" 
+                      stroke="currentColor" 
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path 
+                      className="opacity-75" 
+                      fill="currentColor" 
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  생성 중...
+                </span>
+              ) : (
+                '포스터 다운로드'
+              )}
+            </button>
+            </div>
+          </>
+        )}
+      </div>
+    </main>
   );
 }
