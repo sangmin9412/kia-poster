@@ -71,6 +71,7 @@ export async function POST(request: Request) {
     
     // 로컬 개발 환경과 프로덕션 환경 구분
     let puppeteer;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, prefer-const
     let browserOptions: any = {
       headless: true,
       defaultViewport: chromium.defaultViewport,
