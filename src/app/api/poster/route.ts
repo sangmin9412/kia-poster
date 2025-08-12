@@ -1,7 +1,6 @@
 export const runtime = 'nodejs';
 export const maxDuration = 30; // Vercel 함수 타임아웃 설정 (초)
 
-import puppeteer, { LaunchOptions } from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
 // Chromium 설정 최적화
@@ -25,10 +24,10 @@ export async function POST(request: Request) {
     const origin = new URL(request.url).origin;
 
     // Vercel 환경과 로컬 환경 구분
+    const isProduction = process.env.NODE_ENV === 'production';
     const isVercel = process.env.VERCEL === '1';
-    const isLocal = !isVercel && process.env.NODE_ENV === 'development';
     
-    console.log('[POST /api/poster] isVercel:', isVercel, 'isLocal:', isLocal);
+    console.log('[POST /api/poster] isProduction:', isProduction, 'isVercel:', isVercel);
     
     // Vercel 환경에서 추가 args 설정
     const chromiumArgs = [
@@ -70,19 +69,27 @@ export async function POST(request: Request) {
       '--single-process'
     ];
     
-    const browserOptions: LaunchOptions = {
+    // 로컬 개발 환경과 프로덕션 환경 구분
+    let puppeteer;
+    let browserOptions: any = {
       headless: true,
-      args: isVercel ? chromiumArgs : ['--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: chromium.defaultViewport,
     };
     
-    // Vercel 환경에서만 executablePath 설정
-    if (isVercel) {
+    if (isProduction || isVercel) {
+      // 프로덕션/Vercel 환경: puppeteer-core + @sparticuz/chromium 사용
+      puppeteer = await import('puppeteer-core');
+      browserOptions.args = chromiumArgs;
       browserOptions.executablePath = await chromium.executablePath();
-      console.log('[POST /api/poster] Chromium path:', browserOptions.executablePath);
+      console.log('[POST /api/poster] Using chromium at:', browserOptions.executablePath);
+    } else {
+      // 로컬 개발 환경: 일반 puppeteer 사용
+      puppeteer = await import('puppeteer');
+      browserOptions.args = ['--no-sandbox', '--disable-setuid-sandbox'];
+      console.log('[POST /api/poster] Using local puppeteer');
     }
     
-    browser = await puppeteer.launch(browserOptions);
+    browser = await puppeteer.default.launch(browserOptions);
 
     try {
       const page = await browser.newPage();
